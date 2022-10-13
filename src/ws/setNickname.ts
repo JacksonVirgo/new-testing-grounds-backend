@@ -1,7 +1,8 @@
 import { SocketEndpoint, WebSocketRequest } from '../structures/WS';
 
 const setNickname: SocketEndpoint = async (req: WebSocketRequest) => {
-	return { status: 500 };
+	console.log('Command Reached - Set Nickname.');
+	return { status: 200, message: 'Nickname Changed' };
 };
 
 export default setNickname;

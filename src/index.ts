@@ -1,9 +1,8 @@
 import express, { json } from 'express';
 import cors from 'cors';
 import protocol from 'http';
-import path from 'path';
 import { Server, Socket } from 'socket.io';
-import { handleRequest, loadWebSocketFunctions, websocketCommands } from './structures/WS';
+import { handleRequest, isWebsocketReady, loadWebSocketFunctions, websocketCommands } from './structures/WS';
 
 // Load Config
 
@@ -41,13 +40,13 @@ const validateSocketConnection = async (socket: Socket): Promise<AuthResponse> =
 io.on('connection', async (socket: Socket) => {
 	const { status } = await validateSocketConnection(socket);
 	if (status == 200) {
-		await loadWebSocketFunctions();
+		let availableCommands = Object.keys(websocketCommands);
 		for (const handle in websocketCommands) {
 			socket.on(handle, async (data: any) => {
 				await handleRequest(socket, data, handle, websocketCommands[handle]);
 			});
 		}
-		socket.emit('connectionSuccess', { status: 200 });
+		socket.emit('connectionSuccess', { status: 200, availableCommands });
 	} else if (status == 401) {
 		socket.emit('validationError', { status: 401 });
 		socket.disconnect(true);
@@ -59,6 +58,9 @@ io.on('connection', async (socket: Socket) => {
 
 server.listen(3000, async () => {
 	console.log(`Connecting to port [${3000}]`);
+	await loadWebSocketFunctions();
+
+	console.log(`WebSocket Server Online`);
 
 	// Connect to Database
 });
