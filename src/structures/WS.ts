@@ -2,29 +2,31 @@ import { Socket } from 'socket.io';
 import { readdirSync } from 'fs';
 import path from 'path';
 
-export interface WebSocketRequest {}
+export interface RawRequest {}
 export interface WebSocketResponse {
 	status: number;
 }
 
-export type SocketEndpoint = (req: WebSocketRequest) => Promise<WebSocketResponse | null>;
-
-export async function handleRequest(socket: Socket, request: any, handle: string, endpoint: SocketEndpoint) {
+export type SocketEndpoint<T> = (req: T) => Promise<WebSocketResponse | null>;
+export async function handleRequest(socket: Socket, request: any, handle: string, endpoint: SocketEndpoint<typeof request>) {
 	try {
-		const parsedRequest = request as WebSocketRequest;
+		const parsedRequest = request as RawRequest;
 		const response = await endpoint(parsedRequest);
 		if (response) {
 			socket.emit(handle, response);
 		}
 	} catch (err) {
 		console.log(err);
-		socket.emit('error', 'An unexpected error has occurred [REQ_HANDLE]');
+		socket.emit('error', {
+			status: 406,
+			where: handle,
+		});
 	}
 }
 
 // Programmatic Loading
 
-export const websocketCommands: Record<string, SocketEndpoint> = {};
+export const websocketCommands: Record<string, SocketEndpoint<any>> = {};
 let hasLoadedCommands = false;
 export function isWebsocketReady() {
 	return hasLoadedCommands;
@@ -42,8 +44,8 @@ export async function loadWebSocketFunctions() {
 	for (const fileHandle of paths) {
 		const handle = fileHandle.split('.')[0];
 		try {
-			const rootImport = await require(path.join(rootPath, fileHandle)).default;
-			const websocketEndpoint = rootImport as SocketEndpoint;
+			const rootImport = await require(path.join(rootPath, fileHandle));
+			const websocketEndpoint = rootImport.default as SocketEndpoint<any>;
 			websocketCommands[handle] = websocketEndpoint;
 
 			loadedWebsocketEndpoints.push(handle);

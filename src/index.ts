@@ -2,7 +2,7 @@ import express, { json } from 'express';
 import cors from 'cors';
 import protocol from 'http';
 import { Server, Socket } from 'socket.io';
-import { handleRequest, isWebsocketReady, loadWebSocketFunctions, websocketCommands } from './structures/WS';
+import { handleRequest, loadWebSocketFunctions, websocketCommands } from './structures/WS';
 
 // Load Config
 
