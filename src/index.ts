@@ -3,7 +3,7 @@ import cors from 'cors';
 import protocol from 'http';
 import { Server, Socket } from 'socket.io';
 import { handleRequest, loadWebSocketFunctions, websocketCommands } from './structures/WS';
-
+import apiRouter from './api/core';
 // Load Config
 
 const app = express();
@@ -17,6 +17,7 @@ const io = new Server(server, {
 
 app.use(cors({}));
 app.use(json());
+app.use('/api', apiRouter);
 
 type AuthProps = { token: string };
 type AuthResponse = {
