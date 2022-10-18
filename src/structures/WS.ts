@@ -1,6 +1,7 @@
 import { Socket } from 'socket.io';
 import { readdirSync } from 'fs';
 import path from 'path';
+import { acceptedSockets } from '../util/auth';
 
 export interface RawRequest {}
 export interface WebSocketResponse {
@@ -10,10 +11,18 @@ export interface WebSocketResponse {
 export type SocketEndpoint<T> = (req: T) => Promise<WebSocketResponse | null>;
 export async function handleRequest(socket: Socket, request: any, handle: string, endpoint: SocketEndpoint<typeof request>) {
 	try {
-		const parsedRequest = request as RawRequest;
-		const response = await endpoint(parsedRequest);
-		if (response) {
-			socket.emit(handle, response);
+		const socketAuth = acceptedSockets[socket.id];
+		if (!socketAuth) {
+			socket.emit('error', {
+				status: 401,
+				where: handle,
+			});
+		} else {
+			const parsedRequest = request as RawRequest;
+			const response = await endpoint(parsedRequest);
+			if (response) {
+				socket.emit(handle, response);
+			}
 		}
 	} catch (err) {
 		console.log(err);

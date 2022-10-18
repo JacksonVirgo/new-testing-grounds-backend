@@ -5,6 +5,8 @@ import { Server, Socket } from 'socket.io';
 import { handleRequest, loadWebSocketFunctions, websocketCommands } from './structures/WS';
 import apiRouter from './api/core';
 import path from 'path';
+import { acceptedSockets, authTokens } from './util/auth';
+import axios from 'axios';
 
 const app = express();
 const server = protocol.createServer(app);
@@ -28,12 +30,20 @@ type AuthResponse = {
 	status: number;
 };
 const validateSocketConnection = async (socket: Socket): Promise<AuthResponse> => {
-	const exampleAuth = 'secret_value';
 	const authData = socket.handshake.auth;
 	if (!authData) return { status: 401 };
 	try {
 		const authDataParsed = authData as AuthProps;
-		if (authDataParsed.token === exampleAuth) return { isValidated: true, status: 200 };
+		const accessData = authTokens[authDataParsed.token];
+		const user = await axios.get('https://discord.com/api/oauth2/@me', { headers: { Authorization: `Bearer ${accessData.accessToken}` } });
+
+		if (user) {
+			const { id } = user.data;
+			if (id) {
+				return { isValidated: true, status: 200 };
+			}
+		}
+
 		return { status: 401 };
 	} catch (err) {
 		console.log(err);
@@ -42,21 +52,31 @@ const validateSocketConnection = async (socket: Socket): Promise<AuthResponse> =
 };
 
 io.on('connection', async (socket: Socket) => {
-	const { status } = await validateSocketConnection(socket);
-	if (status == 200) {
-		let availableCommands = Object.keys(websocketCommands);
-		for (const handle in websocketCommands) {
-			socket.on(handle, async (data: any) => {
-				await handleRequest(socket, data, handle, websocketCommands[handle]);
-			});
+	socket.on('verify', async (data) => {
+		const { sessionToken } = data;
+		if (!sessionToken) return;
+
+		try {
+			const accessData = authTokens[sessionToken];
+			const user = await axios.get('https://discord.com/api/oauth2/@me', { headers: { Authorization: `Bearer ${accessData.accessToken}` } });
+
+			// replace next two lines with proper error handling.
+			if (!user) return;
+			if (!user.data.id) return;
+
+			acceptedSockets[socket.id] = {
+				verified: true,
+				sessionToken,
+			};
+		} catch (err) {
+			console.log('Socket Verification Error', err);
 		}
-		socket.emit('connectionSuccess', { status: 200, availableCommands });
-	} else if (status == 401) {
-		socket.emit('validationError', { status: 401 });
-		socket.disconnect(true);
-		// GET CLIENT to redirect to the login page.
-	} else {
-		socket.emit('error', { status: 500, message: 'An unexpected error has occurred.' });
+	});
+
+	for (const handle in websocketCommands) {
+		socket.on(handle, async (data: any) => {
+			await handleRequest(socket, data, handle, websocketCommands[handle]);
+		});
 	}
 });
 
