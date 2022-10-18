@@ -4,7 +4,7 @@ import protocol from 'http';
 import { Server, Socket } from 'socket.io';
 import { handleRequest, loadWebSocketFunctions, websocketCommands } from './structures/WS';
 import apiRouter from './api/core';
-// Load Config
+import path from 'path';
 
 const app = express();
 const server = protocol.createServer(app);
@@ -18,6 +18,9 @@ const io = new Server(server, {
 app.use(cors({}));
 app.use(json());
 app.use('/api', apiRouter);
+app.get('/', (req, res) => {
+	res.sendFile(path.join(__dirname, '..', 'client', 'index.html'));
+});
 
 type AuthProps = { token: string };
 type AuthResponse = {
