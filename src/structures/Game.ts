@@ -1,18 +1,19 @@
+import { Socket } from 'socket.io';
 import type { SocketId } from 'socket.io-adapter';
 
-let currentGames: Record<string, Game> = {};
+let currentGames: Record<SocketId, Game> = {};
 export function getGame(key: string) {
 	return currentGames[key];
 }
 
 export type RoomCode = string;
 class Game {
-	private hosts: SocketId[] = [];
+	private host: SocketId;
 	private players: SocketId[] = [];
-	private roomCode: RoomCode;
-	constructor() {
-		this.roomCode = generateRoomCode(4);
-		if (!currentGames[this.roomCode]) currentGames[this.roomCode] = this;
+	constructor(host: SocketId) {
+		this.host = host;
+		delete currentGames[this.host];
+		currentGames[this.host] = this;
 	}
 }
 

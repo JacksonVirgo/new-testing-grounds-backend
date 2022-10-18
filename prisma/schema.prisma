@@ -6,3 +6,10 @@ datasource db {
   provider = "mongodb"
   url      = env("DATABASE_URL")
 }
+
+// Base User for Authentication.
+// AccessToken and RefreshToken hashed by a secret.
+model User {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  discordId String @unique
+}
