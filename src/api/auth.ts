@@ -3,14 +3,7 @@ import { URLSearchParams } from 'url';
 import axios from 'axios';
 import { getConfig } from '../config';
 import crypto from 'crypto';
-
-type AccessData = {
-	accessToken: string;
-	refreshToken: string;
-	expires: number;
-};
-type SessionToken = string;
-const authTokens: Record<SessionToken, AccessData> = {};
+import { authTokens, SessionToken } from '../util/auth';
 
 const router = Router();
 const config = getConfig();
