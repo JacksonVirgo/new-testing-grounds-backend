@@ -19,7 +19,7 @@ router.post('/', async (req, res) => {
 		data_1.append('client_id', config.discordClientID);
 		data_1.append('client_secret', config.discordClientSecret);
 		data_1.append('grant_type', 'authorization_code');
-		data_1.append('redirect_uri', `http://localhost:3000`);
+		data_1.append('redirect_uri', `http://localhost:3000/login`);
 		data_1.append('scope', 'identify');
 		data_1.append('code', code as string);
 

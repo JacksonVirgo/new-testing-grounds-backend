@@ -1,28 +1,28 @@
 import { Socket } from 'socket.io';
 import type { SocketId } from 'socket.io-adapter';
+import { connectedSockets } from './Socket';
 
-let currentGames: Record<SocketId, Game> = {};
-export function getGame(key: string) {
-	return currentGames[key];
-}
-
+export const currentGames: Record<SocketId, Game> = {};
 export type RoomCode = string;
+
+type PhaseType = 'day' | 'night' | 'pregame';
+
 class Game {
-	private host: SocketId;
-	private players: SocketId[] = [];
+	public host: SocketId;
+	public players: SocketId[] = [];
+
+	private currentPhaseType: PhaseType = 'pregame';
+
 	constructor(host: SocketId) {
 		this.host = host;
 		delete currentGames[this.host];
 		currentGames[this.host] = this;
 	}
-}
-
-function generateRoomCode(length: number) {
-	const characters = 'abcdefghijklmnopqrstuvwxyz';
-	let result = ' ';
-	const charactersLength = characters.length;
-	for (let i = 0; i < length; i++) {
-		result += characters.charAt(Math.floor(Math.random() * charactersLength));
+	onMessage(message: string) {
+		// Broadcast Message
 	}
-	return result;
+	onWhisper(message: string, recipient: number) {
+		// Broadcast Whisper Notif
+	}
+	onAction(target: number | number[]) {}
 }

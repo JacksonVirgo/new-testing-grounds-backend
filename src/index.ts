@@ -16,12 +16,22 @@ const io = new Server(server, {
 		methods: ['GET', 'POST'],
 	},
 });
+const clientPages = path.join(__dirname, '..', 'client', 'pages');
 
 app.use(cors({}));
 app.use(json());
 app.use('/api', apiRouter);
 app.get('/', (req, res) => {
-	res.sendFile(path.join(__dirname, '..', 'client', 'index.html'));
+	res.sendFile(path.join(clientPages, 'index.html'));
+});
+app.get('/play', (req, res) => {
+	res.sendFile(path.join(clientPages, 'game.html'));
+});
+app.get('/login', (req, res) => {
+	res.sendFile(path.join(clientPages, 'login.html'));
+});
+app.get('/lobby', (req, res) => {
+	res.sendFile(path.join(clientPages, 'lobby.html'));
 });
 
 type AuthProps = { token: string };

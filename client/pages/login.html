@@ -8,25 +8,22 @@
 	</head>
 	<body>
 		<h1>Hello.</h1>
+		<a href="https://discord.com/api/oauth2/authorize?client_id=1030273768112799854&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Flogin&response_type=code&scope=identify%20guilds.join%20guilds">Login with Discord</a>
+
 		<script src="/socket.io/socket.io.js"></script>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.1/jquery.min.js" integrity="sha512-aVKKRRi/Q/YV+4mjoKBsE4x3H+BkegoM/em46NNlCqNTmUYADjBbeNefNxYV7giUp0VxICtqdrbqU7iVaeZNXA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 		<script>
-			console.log('First.');
 			const socket = io();
 			$(document).ready(async () => {
-				console.log('JQuery Loaded.');
-
 				const urlStr = document.URL;
 				const queryStr = urlStr.split('?')[1];
 				const query = new URLSearchParams(queryStr);
-
 				const code = query.get('code');
-				console.log(code);
-
 				if (code) {
 					const authData = await fetch(`http://localhost:3000/api/auth?code=${code}`, { method: 'POST' });
-					const res = await authData.json();
-					console.log(res);
+					if (authData.status === 200) {
+						window.location.replace('/lobby');
+					}
 				}
 			});
 		</script>
