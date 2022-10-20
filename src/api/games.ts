@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { SocketId } from 'socket.io-adapter';
 import { currentGames } from '../structures/Game';
+import { connectedSockets, DiscordInformation } from '../structures/Socket';
 
 const router = Router();
 
@@ -21,6 +22,17 @@ router.route('/').get((req, res) => {
 		});
 	});
 	res.status(200).json(response);
+});
+
+router.get('/onlineusers', (req, res) => {
+	const users: DiscordInformation[] = [];
+	const values = Object.values(connectedSockets);
+
+	values.forEach(({ discord }) => {
+		users.push(discord);
+	});
+
+	return res.status(200).json({ users });
 });
 
 export default router;

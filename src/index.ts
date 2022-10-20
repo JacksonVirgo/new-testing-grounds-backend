@@ -5,8 +5,9 @@ import { Server, Socket } from 'socket.io';
 import { handleRequest, loadWebSocketFunctions, websocketCommands } from './structures/WS';
 import apiRouter from './api/core';
 import path from 'path';
-import { acceptedSockets, authTokens } from './util/auth';
-import axios from 'axios';
+import { verifySessionToken } from './api/auth';
+import { parse } from 'cookie';
+import { connectedSockets } from './structures/Socket';
 
 const app = express();
 const server = protocol.createServer(app);
@@ -16,85 +17,69 @@ const io = new Server(server, {
 		methods: ['GET', 'POST'],
 	},
 });
-const clientPages = path.join(__dirname, '..', 'client', 'pages');
+const clientPages = path.join(__dirname, '..', 'client');
 
 app.use(cors({}));
 app.use(json());
 app.use('/api', apiRouter);
-app.get('/', (req, res) => {
-	res.sendFile(path.join(clientPages, 'index.html'));
-});
-app.get('/play', (req, res) => {
-	res.sendFile(path.join(clientPages, 'game.html'));
-});
-app.get('/login', (req, res) => {
-	res.sendFile(path.join(clientPages, 'login.html'));
-});
-app.get('/lobby', (req, res) => {
-	res.sendFile(path.join(clientPages, 'lobby.html'));
-});
+app.use(express.static(clientPages, { extensions: ['html'] }));
 
-type AuthProps = { token: string };
-type AuthResponse = {
-	isValidated?: boolean;
-	status: number;
-};
-const validateSocketConnection = async (socket: Socket): Promise<AuthResponse> => {
-	const authData = socket.handshake.auth;
-	if (!authData) return { status: 401 };
-	try {
-		const authDataParsed = authData as AuthProps;
-		const accessData = authTokens[authDataParsed.token];
-		const user = await axios.get('https://discord.com/api/oauth2/@me', { headers: { Authorization: `Bearer ${accessData.accessToken}` } });
+async function verifySocketConnection(socket: Socket, callback: () => void, error: (status: number, reason?: string) => void) {
+	const cookies = socket.handshake.headers.cookie;
+	if (!cookies) {
+		return error(406, 'Invalid cookies.');
+	}
 
-		if (user) {
-			const { id } = user.data;
-			if (id) {
-				return { isValidated: true, status: 200 };
-			}
+	if (cookies.includes(`sessionToken=`)) {
+		const cookie = parse(cookies);
+		const sessionToken = cookie['sessionToken'];
+		console.log(sessionToken);
+		if (!sessionToken) {
+			return error(401, 'Lack of session token');
 		}
 
-		return { status: 401 };
-	} catch (err) {
-		console.log(err);
-		return { status: 500 };
+		const { status, reason, discord } = await verifySessionToken(sessionToken);
+		console.log(status, reason);
+		if (status === 200 && discord) {
+			console.log('Verified');
+
+			// ADD A LATER CHECK TO MAKE SURE
+			// ONLY ONE SOCKET CAN BE CONNECTED TO
+			// AN ACCOUNT AT ANY GIVEN TIME.
+			// TOO LAZY RN T-T
+			connectedSockets[socket.id] = {
+				socket,
+				discord,
+			};
+			return callback();
+		}
+
+		return error(401, 'Session token verification failed.');
 	}
-};
+}
 
 io.on('connection', async (socket: Socket) => {
-	socket.on('verify', async (data) => {
-		const { sessionToken } = data;
-		if (!sessionToken) return;
-
-		try {
-			const accessData = authTokens[sessionToken];
-			const user = await axios.get('https://discord.com/api/oauth2/@me', { headers: { Authorization: `Bearer ${accessData.accessToken}` } });
-
-			// replace next two lines with proper error handling.
-			if (!user) return;
-			if (!user.data.id) return;
-
-			acceptedSockets[socket.id] = {
-				verified: true,
-				sessionToken,
-			};
-		} catch (err) {
-			console.log('Socket Verification Error', err);
+	verifySocketConnection(
+		socket,
+		() => {
+			console.log(`Socket Verified - ${socket.id}`);
+			socket.on('disconnect', () => console.log(`Socket Disconnected - ${socket.id}`));
+			for (const handle in websocketCommands) {
+				socket.on(handle, async (data: any) => {
+					const webSocket = connectedSockets[socket.id];
+					await handleRequest(io, webSocket, data, handle, websocketCommands[handle]);
+				});
+			}
+		},
+		(status, reason) => {
+			console.log('Verification Failed', status, reason);
+			socket.emit('loginRequest');
+			socket.disconnect(true);
 		}
-	});
-
-	for (const handle in websocketCommands) {
-		socket.on(handle, async (data: any) => {
-			await handleRequest(socket, data, handle, websocketCommands[handle]);
-		});
-	}
+	);
 });
 
 server.listen(3000, async () => {
 	console.log(`Connecting to port [${3000}]`);
 	await loadWebSocketFunctions();
-
-	console.log(`WebSocket Server Online`);
-
-	// Connect to Database
 });

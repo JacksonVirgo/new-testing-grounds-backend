@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Testing Grounds</title>
+	</head>
+	<body>
+		<h1>This is a Lobby. Chat with fellow non-players</h1>
+		<div style="display: flex; flex-direction: row">
+			<div style="flex-grow: 1">
+				<form id="chatboxform">
+					<input id="chatboxmessage" type="text" placeholder="message" />
+					<input type="submit" value="Send" />
+				</form>
+
+				<ul id="chatboxresults"></ul>
+			</div>
+			<div style="flex-grow: 1">
+				<ul>
+					Imagine a list of all online users are here.
+				</ul>
+			</div>
+		</div>
+
+		<script src="/socket.io/socket.io.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.1/jquery.min.js" integrity="sha512-aVKKRRi/Q/YV+4mjoKBsE4x3H+BkegoM/em46NNlCqNTmUYADjBbeNefNxYV7giUp0VxICtqdrbqU7iVaeZNXA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+		<script>
+			const socket = io();
+
+			async function updateUsers() {
+				const fetchOnlineUsers = await fetch(`/api/games/onlineusers`, { method: 'GET' });
+				const json = await fetchOnlineUsers.json();
+				console.log(json);
+			}
+
+			$(document).ready(async () => {
+				updateUsers();
+				$('#chatboxform').on('submit', (e) => {
+					e.preventDefault();
+					const message = $('#chatboxmessage').val();
+					socket.emit('chatMessage', { message: message });
+					console.log('Sending Message', message);
+				});
+			});
+
+			socket.on('disconnect', () => {
+				console.log('Disconnected.');
+			});
+
+			socket.on('loginRequest', () => {
+				window.location.replace('/login');
+			});
+
+			socket.on('newUser', () => {
+				updateUsers();
+			});
+
+			socket.on('chatMessage', ({ author, message }) => {
+				console.log('Received', author, message);
+				$('#chatboxresults').append(`<li><strong>${author}: </strong>${message}</li>`);
+			});
+		</script>
+	</body>
+</html>

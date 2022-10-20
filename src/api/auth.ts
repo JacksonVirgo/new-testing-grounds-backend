@@ -2,8 +2,9 @@ import { Router } from 'express';
 import { URLSearchParams } from 'url';
 import axios from 'axios';
 import { getConfig } from '../config';
-import crypto from 'crypto';
+import crypto, { verify } from 'crypto';
 import { authTokens, SessionToken } from '../util/auth';
+import { DiscordInformation } from '../structures/Socket';
 
 const router = Router();
 const config = getConfig();
@@ -43,7 +44,12 @@ router.post('/', async (req, res) => {
 				}
 			}
 
-			return res.status(200).json({ sessionToken });
+			return res
+				.cookie('sessionToken', sessionToken, {
+					secure: false,
+					httpOnly: true,
+				})
+				.sendStatus(200);
 		} else return res.status(401).json({});
 	} catch (err) {
 		console.log(err);
@@ -51,20 +57,47 @@ router.post('/', async (req, res) => {
 	}
 });
 
+router.post('/logout', async (req, res) => {
+	res.cookie('sessionToken', '', {
+		secure: false,
+		httpOnly: true,
+	}).sendStatus(200);
+});
+
+export type DiscordData = {
+	status: number;
+	discord?: DiscordInformation;
+	reason?: string;
+};
+export async function verifySessionToken(sessionToken: string | undefined): Promise<DiscordData> {
+	if (!sessionToken) return { status: 406 };
+	try {
+		const accessDetails = authTokens[sessionToken];
+		if (!accessDetails) return { status: 401, reason: 'You need to log in.' };
+		const user = await axios.get('https://discord.com/api/oauth2/@me', { headers: { Authorization: `Bearer ${accessDetails.accessToken}` } });
+		if (!user) return { status: 401, reason: 'Invalid token' };
+
+		const userData = user.data.user;
+		const { id, username, avatar, discriminator } = userData;
+
+		const discordData: DiscordInformation = {
+			id,
+			username,
+			avatar,
+			discriminator,
+		};
+
+		return { status: 200, discord: discordData };
+	} catch (err) {
+		console.log('Auth Verification Error', err);
+		return { status: 500 };
+	}
+}
+
 router.get('/verify', async (req, res) => {
 	const { body } = req;
 	const { sessionToken } = body;
-	if (!sessionToken) return res.sendStatus(406);
-	try {
-		const accessDetails = authTokens[sessionToken];
-		if (!accessDetails) return res.sendStatus(401);
-		const user = await axios.get('https://discord.com/api/oauth2/@me', { headers: { Authorization: `Bearer ${accessDetails.accessToken}` } });
-		if (!user) return res.sendStatus(401);
-		return res.sendStatus(200);
-	} catch (err) {
-		console.log('Auth Verification Error', err);
-		return res.sendStatus(500);
-	}
+	return verifySessionToken(sessionToken);
 });
 
 export default router;

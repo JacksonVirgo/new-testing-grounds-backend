@@ -1,32 +1,29 @@
-import { Socket } from 'socket.io';
+import { Server } from 'socket.io';
 import { readdirSync } from 'fs';
 import path from 'path';
-import { acceptedSockets } from '../util/auth';
+import { DefaultEventsMap } from 'socket.io/dist/typed-events';
+import { WebSocket } from './Socket';
 
 export interface RawRequest {}
 export interface WebSocketResponse {
 	status: number;
 }
 
-export type SocketEndpoint<T> = (req: T) => Promise<WebSocketResponse | null>;
-export async function handleRequest(socket: Socket, request: any, handle: string, endpoint: SocketEndpoint<typeof request>) {
+type WebsocketServer = Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any>;
+export type SocketEndpoint<T> = (req: T, socket: WebSocket, server: WebsocketServer) => Promise<WebSocketResponse | null>;
+export async function handleRequest(server: WebsocketServer, socket: WebSocket, request: any, handle: string, endpoint: SocketEndpoint<typeof request>) {
+	console.log('Request for - ' + handle);
 	try {
-		const socketAuth = acceptedSockets[socket.id];
-		if (!socketAuth) {
-			socket.emit('error', {
-				status: 401,
-				where: handle,
-			});
-		} else {
-			const parsedRequest = request as RawRequest;
-			const response = await endpoint(parsedRequest);
-			if (response) {
-				socket.emit(handle, response);
-			}
+		const parsedRequest = request as RawRequest;
+		const response = await endpoint(parsedRequest, socket, server);
+		console.log(handle, !!response);
+
+		if (response) {
+			socket.socket.emit(handle, response);
 		}
 	} catch (err) {
 		console.log(err);
-		socket.emit('error', {
+		socket.socket.emit('error', {
 			status: 406,
 			where: handle,
 		});
