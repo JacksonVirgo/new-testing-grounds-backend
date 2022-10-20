@@ -28,6 +28,12 @@ router.get('/onlineusers', (req, res) => {
 	const users: DiscordInformation[] = [];
 	const values = Object.values(connectedSockets);
 
+	// Probably add in a way for disconnects
+	// not to count for this for a small period,
+	// or state specifically that they had recently
+	// disconnected (as they can reconnect and still
+	// should appear)
+
 	values.forEach(({ discord }) => {
 		users.push(discord);
 	});
