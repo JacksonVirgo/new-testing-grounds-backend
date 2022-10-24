@@ -1,85 +1,48 @@
-import express, { json } from 'express';
-import cors from 'cors';
 import protocol from 'http';
 import { Server, Socket } from 'socket.io';
 import { handleRequest, loadWebSocketFunctions, websocketCommands } from './structures/WS';
-import apiRouter from './api/core';
-import path from 'path';
-import { verifySessionToken } from './api/auth';
-import { parse } from 'cookie';
-import { connectedSockets } from './structures/Socket';
+import { loadExpress } from './api/core';
+import { verifySocketConnection } from './util/auth';
+import { onlineUsers } from './structures/User';
+import { PrismaClient } from '@prisma/client';
+import { decrypt, encrypt } from './util/crypto';
 
-const app = express();
+export const prisma = new PrismaClient();
+const app = loadExpress();
 const server = protocol.createServer(app);
 const io = new Server(server, {
 	cors: {
-		origin: '*',
+		origin: ['http://localhost:3000', 'http://localhost:3001'],
 		methods: ['GET', 'POST'],
+		credentials: true,
 	},
 });
-const clientPages = path.join(__dirname, '..', 'client');
-
-app.use(cors({}));
-app.use(json());
-app.use('/api', apiRouter);
-app.use(express.static(clientPages, { extensions: ['html'] }));
-
-async function verifySocketConnection(socket: Socket, callback: () => void, error: (status: number, reason?: string) => void) {
-	const cookies = socket.handshake.headers.cookie;
-	if (!cookies) {
-		return error(406, 'Invalid cookies.');
-	}
-
-	if (cookies.includes(`sessionToken=`)) {
-		const cookie = parse(cookies);
-		const sessionToken = cookie['sessionToken'];
-		console.log(sessionToken);
-		if (!sessionToken) {
-			return error(401, 'Lack of session token');
-		}
-
-		const { status, reason, discord } = await verifySessionToken(sessionToken);
-		console.log(status, reason);
-		if (status === 200 && discord) {
-			console.log('Verified');
-
-			// ADD A LATER CHECK TO MAKE SURE
-			// ONLY ONE SOCKET CAN BE CONNECTED TO
-			// AN ACCOUNT AT ANY GIVEN TIME.
-			// TOO LAZY RN T-T
-			connectedSockets[socket.id] = {
-				socket,
-				discord,
-			};
-			return callback();
-		}
-
-		return error(401, 'Session token verification failed.');
-	}
-}
 
 io.on('connection', async (socket: Socket) => {
 	verifySocketConnection(
 		socket,
 		() => {
-			console.log(`Socket Verified - ${socket.id}`);
-			socket.on('disconnect', () => console.log(`Socket Disconnected - ${socket.id}`));
+			console.log('Socket Accepted');
+
+			socket.emit('validationSuccess');
+			socket.on('disconnect', () => {});
 			for (const handle in websocketCommands) {
 				socket.on(handle, async (data: any) => {
-					const webSocket = connectedSockets[socket.id];
+					const webSocket = onlineUsers[socket.id];
 					await handleRequest(io, webSocket, data, handle, websocketCommands[handle]);
 				});
 			}
 		},
 		(status, reason) => {
-			console.log('Verification Failed', status, reason);
-			socket.emit('loginRequest');
+			console.log('Socket Kicked', status, reason);
+			socket.emit('loginRequest', { reason });
 			socket.disconnect(true);
 		}
 	);
 });
 
-server.listen(3000, async () => {
-	console.log(`Connecting to port [${3000}]`);
+const PORT = 3000;
+server.listen(PORT, async () => {
+	console.log(`Connecting to port [${PORT}]`);
 	await loadWebSocketFunctions();
 });

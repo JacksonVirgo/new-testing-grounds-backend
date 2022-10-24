@@ -1,0 +1,18 @@
+main {
+	width: 550px;
+	height: 550px;
+
+	background-color: white;
+	border-radius: 0.375rem;
+	display: flex;
+	flex-direction: column;
+
+	justify-content: center;
+	align-items: center;
+}
+
+body {
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+}

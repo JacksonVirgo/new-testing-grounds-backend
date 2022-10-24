@@ -2,7 +2,7 @@ import { Server } from 'socket.io';
 import { readdirSync } from 'fs';
 import path from 'path';
 import { DefaultEventsMap } from 'socket.io/dist/typed-events';
-import { WebSocket } from './Socket';
+import { User } from './User';
 
 export interface RawRequest {}
 export interface WebSocketResponse {
@@ -10,20 +10,19 @@ export interface WebSocketResponse {
 }
 
 type WebsocketServer = Server<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any>;
-export type SocketEndpoint<T> = (req: T, socket: WebSocket, server: WebsocketServer) => Promise<WebSocketResponse | null>;
-export async function handleRequest(server: WebsocketServer, socket: WebSocket, request: any, handle: string, endpoint: SocketEndpoint<typeof request>) {
+export type SocketEndpoint = (req: any, user: User, server: WebsocketServer) => Promise<WebSocketResponse | null>;
+export async function handleRequest(server: WebsocketServer, user: User, request: any, handle: string, endpoint: SocketEndpoint) {
 	console.log('Request for - ' + handle);
 	try {
 		const parsedRequest = request as RawRequest;
-		const response = await endpoint(parsedRequest, socket, server);
+		const response = await endpoint(parsedRequest, user, server);
 		console.log(handle, !!response);
-
 		if (response) {
-			socket.socket.emit(handle, response);
+			user.socket.emit(handle, response);
 		}
 	} catch (err) {
 		console.log(err);
-		socket.socket.emit('error', {
+		user.socket.emit('error', {
 			status: 406,
 			where: handle,
 		});
@@ -32,7 +31,7 @@ export async function handleRequest(server: WebsocketServer, socket: WebSocket, 
 
 // Programmatic Loading
 
-export const websocketCommands: Record<string, SocketEndpoint<any>> = {};
+export const websocketCommands: Record<string, SocketEndpoint> = {};
 let hasLoadedCommands = false;
 export function isWebsocketReady() {
 	return hasLoadedCommands;
@@ -51,7 +50,7 @@ export async function loadWebSocketFunctions() {
 		const handle = fileHandle.split('.')[0];
 		try {
 			const rootImport = await require(path.join(rootPath, fileHandle));
-			const websocketEndpoint = rootImport.default as SocketEndpoint<any>;
+			const websocketEndpoint = rootImport.default as SocketEndpoint;
 			websocketCommands[handle] = websocketEndpoint;
 
 			loadedWebsocketEndpoints.push(handle);

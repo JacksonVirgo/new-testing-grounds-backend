@@ -2,13 +2,18 @@ import { Router } from 'express';
 import { URLSearchParams } from 'url';
 import axios from 'axios';
 import { getConfig } from '../config';
-import crypto, { verify } from 'crypto';
-import { authTokens, SessionToken } from '../util/auth';
-import { DiscordInformation } from '../structures/Socket';
+import crypto from 'crypto';
+import { SessionToken } from '../util/auth';
+import { prisma } from '..';
+import jwt from 'jsonwebtoken';
+import { checkHash, decrypt, encrypt, hash } from '../util/crypto';
 
 const router = Router();
 const config = getConfig();
-const scopes = ['identify', 'guilds', 'guilds.join'];
+function getRandomSessionToken(): SessionToken {
+	let sessionToken: SessionToken = crypto.randomUUID().split('-').join('');
+	return sessionToken;
+}
 
 router.post('/', async (req, res) => {
 	const { query } = req;
@@ -28,31 +33,59 @@ router.post('/', async (req, res) => {
 
 		if (result.status === 200) {
 			const { access_token, expires_in, refresh_token } = result.data;
+			const user = await axios.get('https://discord.com/api/oauth2/@me', { headers: { Authorization: `Bearer ${access_token}` } });
+			const { id, username } = user.data.user;
 
-			let sessionToken: SessionToken | undefined;
-			let hasSessionToken = false;
-			while (!hasSessionToken) {
-				sessionToken = crypto.randomUUID().split('-').join('');
-				const fetchedSession = authTokens[sessionToken];
-				if (!fetchedSession) {
-					authTokens[sessionToken] = {
-						accessToken: access_token,
-						refreshToken: refresh_token,
-						expires: expires_in,
-					};
-					hasSessionToken = true;
-				}
+			const fetchedUser = await prisma.user.findUnique({ where: { discordId: id } });
+			const sessionToken = getRandomSessionToken();
+
+			const encryptedAccessToken = encrypt(access_token);
+			const encryptedRefreshToken = encrypt(refresh_token);
+			const hashedSession = await hash(sessionToken); // Not sure if this is fully reliable :p
+			if (!hashedSession) throw Error();
+
+			if (fetchedUser) {
+				const updatedUser = await prisma.user.update({
+					where: {
+						discordId: id,
+					},
+					data: {
+						accessToken: encryptedAccessToken,
+						sessionToken: hashedSession,
+						refreshToken: encryptedRefreshToken,
+					},
+				});
+
+				if (!updatedUser) return res.status(500).json({ error: 'Error updating the database.' });
+			} else {
+				const newUser = await prisma.user.create({
+					data: {
+						discordId: id,
+						accessToken: encryptedAccessToken,
+						sessionToken: hashedSession,
+						refreshToken: encryptedRefreshToken,
+					},
+				});
+				if (!newUser) return res.status(500).json({ error: 'Error updating the database.' });
 			}
 
+			const jwtToken = jwt.sign(
+				{
+					discordId: id,
+					sessionToken,
+				},
+				config.jwtSecret
+			);
+
 			return res
-				.cookie('sessionToken', sessionToken, {
+				.cookie('sessionToken', jwtToken, {
 					secure: false,
 					httpOnly: true,
 				})
 				.sendStatus(200);
 		} else return res.status(401).json({});
 	} catch (err) {
-		console.log(err);
+		console.log('Verif Err yayeet');
 		return res.status(500).json({});
 	}
 });
@@ -64,33 +97,39 @@ router.post('/logout', async (req, res) => {
 	}).sendStatus(200);
 });
 
-export type DiscordData = {
-	status: number;
-	discord?: DiscordInformation;
-	reason?: string;
+type VerifiedSession = {
+	discordId: string;
+	username: string;
 };
-export async function verifySessionToken(sessionToken: string | undefined): Promise<DiscordData> {
-	if (!sessionToken) return { status: 406 };
+export async function verifySessionToken(session: string): Promise<VerifiedSession | null> {
 	try {
-		const accessDetails = authTokens[sessionToken];
-		if (!accessDetails) return { status: 401, reason: 'You need to log in.' };
-		const user = await axios.get('https://discord.com/api/oauth2/@me', { headers: { Authorization: `Bearer ${accessDetails.accessToken}` } });
-		if (!user) return { status: 401, reason: 'Invalid token' };
+		const payload = jwt.verify(session, config.jwtSecret);
+		if (!payload) return null;
 
-		const userData = user.data.user;
-		const { id, username, avatar, discriminator } = userData;
+		const { discordId, sessionToken } = payload as any;
+		if (!(discordId && sessionToken)) return null;
 
-		const discordData: DiscordInformation = {
-			id,
-			username,
-			avatar,
-			discriminator,
-		};
+		const fetchedUser = await prisma.user.findFirst({
+			where: {
+				discordId,
+			},
+		});
+		if (!fetchedUser) throw Error('Could not fetch user.');
+		if (!checkHash(sessionToken, fetchedUser.sessionToken)) throw Error('Invalid Session Token');
 
-		return { status: 200, discord: discordData };
+		const { accessToken } = fetchedUser;
+		const decryptedAccessToken = decrypt(accessToken);
+
+		const user = await axios.get('https://discord.com/api/oauth2/@me', { headers: { Authorization: `Bearer ${decryptedAccessToken}` } });
+		if (!user) return null;
+
+		const { id, username } = user.data.user;
+		if (!(id && username)) return null;
+
+		return { discordId: id, username };
 	} catch (err) {
-		console.log('Auth Verification Error', err);
-		return { status: 500 };
+		console.log('Session Token Verification Error (z)', err);
+		return null;
 	}
 }
 

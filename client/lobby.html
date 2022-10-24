@@ -5,9 +5,16 @@
 		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>Testing Grounds</title>
+
+		<link rel="stylesheet" href="/css/reset.css" />
 	</head>
 	<body>
-		<h1>This is a Lobby. Chat with fellow non-players</h1>
+		<main>
+			<section class="chat"></section>
+			<section class="users">
+				<ul id="userlist" style="list-style: none; padding: 0"></ul>
+			</section>
+		</main>
 		<div style="display: flex; flex-direction: row">
 			<div style="flex-grow: 1">
 				<form id="chatboxform">
@@ -18,9 +25,8 @@
 				<ul id="chatboxresults"></ul>
 			</div>
 			<div style="flex-grow: 1">
-				<ul>
-					Imagine a list of all online users are here.
-				</ul>
+				<h2>Currently Online</h2>
+				<ul id="userlist" style="list-style: none; padding: 0"></ul>
 			</div>
 		</div>
 
@@ -29,20 +35,39 @@
 		<script>
 			const socket = io();
 
-			async function updateUsers() {
-				const fetchOnlineUsers = await fetch(`/api/games/onlineusers`, { method: 'GET' });
-				const json = await fetchOnlineUsers.json();
-				console.log(json);
+			async function updateUsers(users) {
+				if (!users) {
+					const fetchOnlineUsers = await fetch(`/api/games/onlineusers`, { method: 'GET' });
+					const json = await fetchOnlineUsers.json();
+					users = json.users;
+				}
+
+				if (!users) return;
+
+				$('#userlist').empty();
+				for (const user of users) {
+					const { avatar, discriminator, id, username } = user;
+					$('#userlist').append(`<li>${username}#${discriminator}</li>`);
+				}
+
+				console.table(users);
 			}
 
 			$(document).ready(async () => {
-				updateUsers();
 				$('#chatboxform').on('submit', (e) => {
 					e.preventDefault();
 					const message = $('#chatboxmessage').val();
 					socket.emit('chatMessage', { message: message });
 					console.log('Sending Message', message);
 				});
+			});
+
+			socket.on('validationSuccess', () => {
+				// updateUsers();
+			});
+
+			socket.on('playerUpdate', ({ users }) => {
+				updateUsers(users);
 			});
 
 			socket.on('disconnect', () => {

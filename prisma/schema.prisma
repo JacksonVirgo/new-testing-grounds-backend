@@ -10,6 +10,9 @@ datasource db {
 // Base User for Authentication.
 // AccessToken and RefreshToken hashed by a secret.
 model User {
-  id        String @id @default(auto()) @map("_id") @db.ObjectId
-  discordId String @unique
+  id           String @id @default(auto()) @map("_id") @db.ObjectId
+  discordId    String @unique
+  accessToken  String // Encrypted
+  refreshToken String // Encrypted
+  sessionToken String // Hashed
 }
